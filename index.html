@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>我的美食口袋名單 (可新增版)</title>
+    <title>大家的美食口袋名單 (雲端同步版)</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
@@ -12,7 +12,6 @@
             --bg-color: #f7f9fc;
             --text-color: #2d3436;
             --card-bg: #ffffff;
-            --shadow: 0 4px 15px rgba(0,0,0,0.08);
         }
 
         body {
@@ -21,10 +20,32 @@
             color: var(--text-color);
             margin: 0;
             padding: 0;
-            padding-bottom: 80px; /* 留給懸浮按鈕空間 */
+            padding-bottom: 80px;
         }
 
-        /* Header & Tabs */
+        /* Loading Overlay */
+        #loading {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(255,255,255,0.9);
+            z-index: 2000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            transition: opacity 0.3s;
+        }
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Header */
         header {
             background-color: var(--card-bg);
             padding: 20px 10px;
@@ -34,386 +55,144 @@
             z-index: 90;
         }
 
-        h1 {
-            margin: 0 0 15px 0;
-            font-size: 1.4rem;
-            text-align: center;
-            color: var(--text-color);
-        }
+        h1 { margin: 0 0 15px 0; font-size: 1.4rem; text-align: center; }
 
-        .tabs-wrapper {
-            overflow-x: auto;
-            white-space: nowrap;
-            padding-bottom: 5px;
-            -webkit-overflow-scrolling: touch; 
-        }
-
-        .tabs {
-            display: inline-flex;
-            gap: 10px;
-            padding: 0 10px;
-        }
-
+        .tabs-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 5px; }
+        .tabs { display: inline-flex; gap: 10px; padding: 0 10px; }
+        
         .tab-btn {
-            border: none;
-            background: #eee;
-            padding: 8px 18px;
-            border-radius: 20px;
-            cursor: pointer;
-            font-size: 0.9rem;
-            transition: all 0.3s ease;
+            border: none; background: #eee; padding: 8px 18px; border-radius: 20px;
+            cursor: pointer; font-size: 0.9rem; transition: all 0.3s ease;
         }
+        .tab-btn.active { background-color: var(--primary-color); color: white; }
 
-        .tab-btn.active {
-            background-color: var(--primary-color);
-            color: white;
-            box-shadow: 0 2px 5px rgba(255, 107, 107, 0.4);
-        }
-
-        /* List Container */
-        .container {
-            max-width: 600px;
-            margin: 20px auto;
-            padding: 0 15px;
-        }
+        /* Container */
+        .container { max-width: 600px; margin: 20px auto; padding: 0 15px; }
 
         .restaurant-card {
-            background: var(--card-bg);
-            border-radius: 16px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: var(--shadow);
-            position: relative;
+            background: var(--card-bg); border-radius: 16px; padding: 20px;
+            margin-bottom: 20px; box-shadow: 0 4px 15px rgba(0,0,0,0.08);
             animation: fadeIn 0.4s ease;
         }
 
-        .delete-btn {
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            color: #dfe6e9;
-            cursor: pointer;
-            transition: color 0.2s;
-        }
-        .delete-btn:hover { color: #ff7675; }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+        .store-name { font-size: 1.2rem; font-weight: 700; margin: 0; }
+        .category-tag { font-size: 0.75rem; background: #e1f5fe; color: #0288d1; padding: 3px 8px; border-radius: 6px; }
 
-        .card-header { margin-bottom: 12px; }
+        .info-row { display: flex; align-items: flex-start; margin-bottom: 8px; font-size: 0.9rem; color: #636e72; }
+        .info-row i { width: 24px; color: var(--primary-color); margin-top: 3px; }
+        .info-row a { color: #636e72; text-decoration: none; border-bottom: 1px dotted #b2bec3; }
+
+        .actions { display: flex; gap: 10px; margin-top: 15px; }
+        .btn { flex: 1; padding: 10px; border-radius: 10px; text-align: center; text-decoration: none; font-size: 0.9rem; font-weight: 600; cursor: pointer; border: none; }
+        .btn-booking { background-color: var(--secondary-color); color: white; }
+        .btn-disabled { background-color: #b2bec3; color: white; pointer-events: none; }
+        .btn-menu { background-color: #f1f2f6; color: var(--text-color); }
+
+        .menu-content { max-height: 0; overflow: hidden; transition: max-height 0.4s ease-out; background: #fafafa; border-radius: 0 0 10px 10px; margin-top: 5px; }
+        .menu-inner { padding: 15px; border-top: 1px dashed #dfe6e9; }
+        .menu-item { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+
+        /* FAB & Modal */
+        .fab { position: fixed; bottom: 25px; right: 25px; width: 60px; height: 60px; background-color: var(--primary-color); color: white; border-radius: 50%; box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4); display: flex; align-items: center; justify-content: center; font-size: 24px; cursor: pointer; z-index: 99; }
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center; }
+        .modal-content { background: white; width: 90%; max-width: 400px; padding: 25px; border-radius: 15px; max-height: 85vh; overflow-y: auto; }
         
-        .store-name {
-            font-size: 1.25rem;
-            font-weight: 700;
-            margin: 0 0 5px 0;
-            color: #2d3436;
-        }
-
-        .category-tag {
-            font-size: 0.75rem;
-            background: #e1f5fe;
-            color: #0288d1;
-            padding: 3px 8px;
-            border-radius: 6px;
-            display: inline-block;
-        }
-
-        .info-row {
-            display: flex;
-            align-items: flex-start;
-            margin-bottom: 8px;
-            font-size: 0.9rem;
-            color: #636e72;
-            line-height: 1.5;
-        }
-
-        .info-row i {
-            width: 24px;
-            color: var(--primary-color);
-            margin-top: 3px;
-        }
-
-        .info-row a {
-            color: #636e72;
-            text-decoration: none;
-            border-bottom: 1px dotted #b2bec3;
-        }
-
-        .actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-
-        .btn {
-            flex: 1;
-            padding: 10px;
-            border-radius: 10px;
-            text-align: center;
-            text-decoration: none;
-            font-size: 0.9rem;
-            font-weight: 600;
-            cursor: pointer;
-            border: none;
-        }
-
-        .btn-booking {
-            background-color: var(--secondary-color);
-            color: white;
-        }
-        
-        .btn-disabled {
-            background-color: #b2bec3;
-            color: white;
-            pointer-events: none;
-        }
-
-        .btn-menu {
-            background-color: #f1f2f6;
-            color: var(--text-color);
-        }
-
-        /* Menu Expansion */
-        .menu-content {
-            max-height: 0;
-            overflow: hidden;
-            transition: max-height 0.4s ease-out;
-            background: #fafafa;
-            border-radius: 0 0 10px 10px;
-            margin-top: 5px;
-        }
-
-        .menu-inner {
-            padding: 15px;
-            border-top: 1px dashed #dfe6e9;
-        }
-
-        .menu-item {
-            display: flex;
-            justify-content: space-between;
-            padding: 6px 0;
-            border-bottom: 1px solid #eee;
-            font-size: 0.9rem;
-        }
-
-        /* Floating Add Button */
-        .fab {
-            position: fixed;
-            bottom: 25px;
-            right: 25px;
-            width: 60px;
-            height: 60px;
-            background-color: var(--primary-color);
-            color: white;
-            border-radius: 50%;
-            box-shadow: 0 4px 15px rgba(255, 107, 107, 0.4);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 24px;
-            cursor: pointer;
-            z-index: 99;
-            transition: transform 0.2s;
-        }
-        .fab:hover { transform: scale(1.1); }
-
-        /* Modal / Form */
-        .modal-overlay {
-            display: none;
-            position: fixed;
-            top: 0; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(0,0,0,0.5);
-            z-index: 1000;
-            justify-content: center;
-            align-items: center;
-        }
-
-        .modal-content {
-            background: white;
-            width: 90%;
-            max-width: 400px;
-            padding: 25px;
-            border-radius: 15px;
-            max-height: 85vh;
-            overflow-y: auto;
-        }
-
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            margin-bottom: 20px;
-        }
-
         .form-group { margin-bottom: 15px; }
-        .form-label { display: block; margin-bottom: 5px; font-weight: bold; font-size: 0.9rem; }
-        .form-input { 
-            width: 100%; 
-            padding: 10px; 
-            border: 1px solid #dfe6e9; 
-            border-radius: 8px; 
-            box-sizing: border-box; 
-            font-size: 1rem;
-        }
-        textarea.form-input { height: 100px; font-family: monospace; }
-        
-        .btn-submit {
-            width: 100%;
-            background: var(--primary-color);
-            color: white;
-            padding: 12px;
-            border: none;
-            border-radius: 8px;
-            font-size: 1rem;
-            cursor: pointer;
-        }
+        .form-label { display: block; margin-bottom: 5px; font-weight: bold; }
+        .form-input { width: 100%; padding: 10px; border: 1px solid #dfe6e9; border-radius: 8px; box-sizing: border-box; }
+        .btn-submit { width: 100%; background: var(--primary-color); color: white; padding: 12px; border: none; border-radius: 8px; font-size: 1rem; cursor: pointer; }
+        .btn-submit:disabled { background: #ccc; }
 
-        @keyframes fadeIn {
-            from { opacity: 0; transform: translateY(10px); }
-            to { opacity: 1; transform: translateY(0); }
-        }
-        
-        /* Utility */
-        .hidden { display: none; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
     </style>
 </head>
 <body>
 
+<div id="loading">
+    <div class="spinner"></div>
+    <p>正在同步雲端美食...</p>
+</div>
+
 <header>
-    <h1>中山區口袋美食 <i class="fas fa-utensils"></i></h1>
+    <h1>大家的美食口袋名單 <i class="fas fa-utensils"></i></h1>
     <div class="tabs-wrapper">
-        <div class="tabs" id="category-tabs">
-            </div>
+        <div class="tabs" id="category-tabs"></div>
     </div>
 </header>
 
-<div class="container" id="restaurant-list">
-    </div>
+<div class="container" id="restaurant-list"></div>
 
-<div class="fab" onclick="openModal()">
-    <i class="fas fa-plus"></i>
-</div>
+<div class="fab" onclick="openModal()"><i class="fas fa-plus"></i></div>
 
 <div class="modal-overlay" id="addModal">
     <div class="modal-content">
-        <div class="modal-header">
-            <h2 style="margin:0">新增店家</h2>
+        <div style="display:flex; justify-content:space-between; margin-bottom:20px;">
+            <h2 style="margin:0">分享新店家</h2>
             <i class="fas fa-times" onclick="closeModal()" style="cursor:pointer; font-size:1.2rem"></i>
         </div>
-        <form id="addForm" onsubmit="addRestaurant(event)">
-            <div class="form-group">
-                <label class="form-label">店名 *</label>
-                <input type="text" id="inputName" class="form-input" required placeholder="例如：屠夫漢堡">
-            </div>
+        <form id="addForm" onsubmit="submitRestaurant(event)">
+            <div class="form-group"><label class="form-label">店名 *</label><input type="text" id="inputName" class="form-input" required></div>
             <div class="form-group">
                 <label class="form-label">分類 *</label>
                 <select id="inputCategory" class="form-input">
-                    <option value="漢堡">漢堡</option>
-                    <option value="咖哩/甜點">咖哩/甜點</option>
-                    <option value="餐酒館">餐酒館</option>
-                    <option value="日式">日式</option>
-                    <option value="咖啡廳">咖啡廳</option>
+                    <option value="漢堡">漢堡</option><option value="咖哩/甜點">咖哩/甜點</option>
+                    <option value="餐酒館">餐酒館</option><option value="日式">日式</option>
+                    <option value="咖啡廳">咖啡廳</option><option value="小吃">小吃</option>
                     <option value="其他">其他</option>
                 </select>
             </div>
-            <div class="form-group">
-                <label class="form-label">地址</label>
-                <input type="text" id="inputAddress" class="form-input" placeholder="例如：中山北路一段...">
-            </div>
-            <div class="form-group">
-                <label class="form-label">電話</label>
-                <input type="text" id="inputPhone" class="form-input" placeholder="02-1234-5678">
-            </div>
-            <div class="form-group">
-                <label class="form-label">營業時間</label>
-                <input type="text" id="inputHours" class="form-input" placeholder="例如：11:30-21:00">
-            </div>
-            <div class="form-group">
-                <label class="form-label">訂位連結 (選填)</label>
-                <input type="url" id="inputBooking" class="form-input" placeholder="https://...">
-            </div>
-            <div class="form-group">
-                <label class="form-label">菜單 (一行一道菜，用空白或$分隔價格)</label>
-                <textarea id="inputMenu" class="form-input" placeholder="招牌漢堡 $250&#10;蒜味薯條 $120&#10;可樂 $50"></textarea>
-            </div>
-            <button type="submit" class="btn-submit">儲存店家</button>
+            <div class="form-group"><label class="form-label">地址</label><input type="text" id="inputAddress" class="form-input"></div>
+            <div class="form-group"><label class="form-label">電話</label><input type="text" id="inputPhone" class="form-input"></div>
+            <div class="form-group"><label class="form-label">營業時間</label><input type="text" id="inputHours" class="form-input"></div>
+            <div class="form-group"><label class="form-label">訂位連結 (選填)</label><input type="url" id="inputBooking" class="form-input"></div>
+            <div class="form-group"><label class="form-label">菜單 (範例: 牛肉堡 $200)</label><textarea id="inputMenu" class="form-input" style="height:100px"></textarea></div>
+            <button type="submit" id="submitBtn" class="btn-submit">送出資料</button>
         </form>
     </div>
 </div>
 
 <script>
-    // 預設資料 (第一次使用時會載入)
-    const defaultData = [
-        {
-            id: 1,
-            name: "Butcher by Lanpengyou (屠夫漢堡)",
-            category: "漢堡",
-            address: "台北市中山區中山北路一段140巷6號",
-            phone: "02-2531-5252",
-            hours: "週二至週日 11:30–14:30, 17:30–21:00 (週一公休)",
-            booking: "https://inline.app/booking/butcherbylanpengyou",
-            menu: [
-                {name: "海鹽堅果牛奶糖漢堡", price: "$280"},
-                {name: "屠夫起司堡", price: "$250"},
-                {name: "蒜味牛肉堡", price: "$280"},
-                {name: "迷迭香蒜味薯條", price: "$120"}
-            ]
-        },
-        {
-            id: 2,
-            name: "青沐 (中山店)",
-            category: "餐酒館",
-            address: "台北市中山區中山北路二段11巷11號",
-            phone: "02-2581-2557",
-            hours: "每日 11:30–21:30",
-            booking: "https://inline.app/booking/qingmu",
-            menu: [
-                {name: "干貝海膽燉飯", price: "$480"},
-                {name: "蟹黃嫩蛋燉飯", price: "$420"},
-                {name: "松露薯條", price: "$200"},
-                {name: "提拉米蘇", price: "$180"}
-            ]
-        },
-        {
-            id: 3,
-            name: "稻町家香料咖哩 (中山店)",
-            category: "咖哩/甜點",
-            address: "台北市中山區中山北路二段42巷20號",
-            phone: "02-2562-2050",
-            hours: "每日 12:00–16:00, 17:30–21:00",
-            booking: "",
-            menu: [
-                {name: "紅酒燉牛頰香料咖哩", price: "$248"},
-                {name: "唐揚去骨雞腿香料咖哩", price: "$228"},
-                {name: "日式生乳焦糖布丁", price: "$70"}
-            ]
-        }
-    ];
+    // ==========================================
+    // 請在這裡貼上你的 Google Apps Script 網址
+    // ==========================================
+    const API_URL = "https://script.google.com/macros/s/AKfycbwyQA1FSArxS-CH72cnTNmkiJF3FOtD6uIZhLdtrEJzha5HatFLTooHQbIhXwyM0UGL/exec"; 
+    // 例如: "https://script.google.com/macros/s/AKfycbx.../exec"
 
     let restaurants = [];
     let currentCategory = 'all';
 
-    // 初始化
-    function init() {
-        const storedData = localStorage.getItem('myFoodList');
-        if (storedData) {
-            restaurants = JSON.parse(storedData);
-        } else {
-            restaurants = defaultData; // 載入預設值
-            saveData();
+    // 啟動載入
+    window.onload = function() {
+        if(API_URL === "YOUR_GOOGLE_SCRIPT_URL") {
+            alert("請先修改程式碼中的 API_URL 為您的 Apps Script 網址！");
+            document.getElementById('loading').style.display = 'none';
+            return;
         }
-        renderTabs();
-        renderList();
+        fetchData();
+    };
+
+    // 從 Google Sheet 抓取資料
+    function fetchData() {
+        fetch(API_URL)
+            .then(res => res.json())
+            .then(data => {
+                // 資料反轉，讓最新的顯示在最上面
+                restaurants = data.reverse(); 
+                renderTabs();
+                renderList();
+                document.getElementById('loading').style.display = 'none';
+            })
+            .catch(err => {
+                console.error(err);
+                alert("讀取資料失敗，請檢查網路或設定");
+                document.getElementById('loading').style.display = 'none';
+            });
     }
 
-    // 儲存資料到 LocalStorage
-    function saveData() {
-        localStorage.setItem('myFoodList', JSON.stringify(restaurants));
-    }
-
-    // 渲染上方 Tab
     function renderTabs() {
         const tabsContainer = document.getElementById('category-tabs');
-        // 取得所有不重複的分類
         const categories = ['all', ...new Set(restaurants.map(r => r.category))];
-        
         let html = '';
         categories.forEach(cat => {
             const displayName = cat === 'all' ? '全部' : cat;
@@ -423,59 +202,45 @@
         tabsContainer.innerHTML = html;
     }
 
-    // 渲染店家列表
     function renderList() {
         const listContainer = document.getElementById('restaurant-list');
         listContainer.innerHTML = '';
+        
+        const filtered = currentCategory === 'all' ? restaurants : restaurants.filter(r => r.category === currentCategory);
 
-        const filtered = currentCategory === 'all' 
-            ? restaurants 
-            : restaurants.filter(r => r.category === currentCategory);
-
-        filtered.forEach(r => {
-            // 處理菜單 HTML
+        filtered.forEach((r, index) => {
+            // 處理菜單文字轉 HTML
             let menuHtml = '';
-            if(r.menu && r.menu.length > 0) {
-                menuHtml = `<div id="menu-${r.id}" class="menu-content"><div class="menu-inner">`;
-                r.menu.forEach(item => {
-                    menuHtml += `<div class="menu-item"><span>${item.name}</span> <span>${item.price}</span></div>`;
+            if(r.menu) {
+                menuHtml = `<div id="menu-${index}" class="menu-content"><div class="menu-inner">`;
+                const lines = r.menu.split('\n');
+                lines.forEach(line => {
+                    if(line.trim()) {
+                        menuHtml += `<div class="menu-item"><span>${line}</span></div>`;
+                    }
                 });
                 menuHtml += `</div></div>`;
-            } else {
-                menuHtml = `<div id="menu-${r.id}" class="menu-content"><div class="menu-inner"><div class="menu-note">暫無菜單資料</div></div></div>`;
             }
 
-            // 處理按鈕
-            const bookingBtn = r.booking 
+            const bookingBtn = r.booking && r.booking.startsWith('http')
                 ? `<a href="${r.booking}" target="_blank" class="btn btn-booking">訂位</a>`
                 : `<div class="btn btn-disabled">現場候位</div>`;
-
-            // Google Maps Link
-            const mapLink = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r.name + ' ' + r.address)}`;
+            
+            const mapLink = `http://googleusercontent.com/maps.google.com/6{encodeURIComponent(r.name + ' ' + r.address)}`;
 
             const card = document.createElement('div');
             card.className = 'restaurant-card';
             card.innerHTML = `
-                <i class="fas fa-trash-alt delete-btn" onclick="deleteRestaurant(${r.id})"></i>
                 <div class="card-header">
                     <h3 class="store-name">${r.name}</h3>
                     <span class="category-tag">${r.category}</span>
                 </div>
-                <div class="info-row">
-                    <i class="fas fa-map-marker-alt"></i>
-                    <a href="${mapLink}" target="_blank">${r.address}</a>
-                </div>
-                <div class="info-row">
-                    <i class="fas fa-phone"></i>
-                    <a href="tel:${r.phone}">${r.phone}</a>
-                </div>
-                <div class="info-row">
-                    <i class="far fa-clock"></i>
-                    <span>${r.hours}</span>
-                </div>
+                <div class="info-row"><i class="fas fa-map-marker-alt"></i><a href="${mapLink}" target="_blank">${r.address}</a></div>
+                <div class="info-row"><i class="fas fa-phone"></i><a href="tel:${r.phone}">${r.phone}</a></div>
+                <div class="info-row"><i class="far fa-clock"></i><span>${r.hours}</span></div>
                 <div class="actions">
                     ${bookingBtn}
-                    <div class="btn btn-menu" onclick="toggleMenu('menu-${r.id}')">菜單 ▼</div>
+                    <div class="btn btn-menu" onclick="toggleMenu('menu-${index}')">菜單 ▼</div>
                 </div>
                 ${menuHtml}
             `;
@@ -483,16 +248,15 @@
         });
     }
 
-    // 篩選功能
     window.filterFood = function(cat) {
         currentCategory = cat;
-        renderTabs(); // 更新按鈕樣式
+        renderTabs();
         renderList();
     }
 
-    // 展開菜單
     window.toggleMenu = function(id) {
         const menu = document.getElementById(id);
+        if(!menu) return;
         if (menu.style.maxHeight) {
             menu.style.maxHeight = null;
         } else {
@@ -500,85 +264,48 @@
         }
     }
 
-    // 刪除功能
-    window.deleteRestaurant = function(id) {
-        if(confirm('確定要刪除這家餐廳嗎？')) {
-            restaurants = restaurants.filter(r => r.id !== id);
-            saveData();
-            // 如果刪除後該分類沒了，切回 all
-            const hasCat = restaurants.some(r => r.category === currentCategory);
-            if(!hasCat && currentCategory !== 'all') currentCategory = 'all';
-            
-            renderTabs();
-            renderList();
-        }
-    }
-
-    // Modal 控制
-    window.openModal = function() {
-        document.getElementById('addModal').style.display = 'flex';
-    }
-    window.closeModal = function() {
-        document.getElementById('addModal').style.display = 'none';
-        document.getElementById('addForm').reset();
-    }
-
-    // 新增餐廳邏輯
-    window.addRestaurant = function(e) {
+    // Modal & Form Logic
+    window.openModal = () => document.getElementById('addModal').style.display = 'flex';
+    window.closeModal = () => document.getElementById('addModal').style.display = 'none';
+    
+    // 送出新餐廳
+    window.submitRestaurant = function(e) {
         e.preventDefault();
-        
-        // 處理菜單文字：一行轉成一個物件
-        const menuText = document.getElementById('inputMenu').value;
-        const menuArray = [];
-        if(menuText.trim()) {
-            const lines = menuText.split('\n');
-            lines.forEach(line => {
-                if(line.trim()) {
-                    // 簡單切割：假設最後一個空格或 $ 後面是價格，這裡做簡易處理
-                    // 這裡直接把整行當名稱，若使用者有打 $ 就顯示，沒打就不顯示
-                    // 為了美觀，稍微嘗試分割
-                    let parts = line.split(/[ $]/);
-                    let price = '';
-                    let name = line;
-                    
-                    // 嘗試抓出價格 (如果有 $ 符號)
-                    if(line.includes('$')) {
-                        const dollarIndex = line.lastIndexOf('$');
-                        name = line.substring(0, dollarIndex).trim();
-                        price = line.substring(dollarIndex).trim();
-                    }
-                    menuArray.push({ name: name, price: price });
-                }
-            });
-        }
+        const btn = document.getElementById('submitBtn');
+        const originalText = btn.innerText;
+        btn.disabled = true;
+        btn.innerText = "資料上傳中...";
 
-        const newRest = {
-            id: Date.now(), // 用時間戳當唯一 ID
+        const formData = {
             name: document.getElementById('inputName').value,
             category: document.getElementById('inputCategory').value,
             address: document.getElementById('inputAddress').value,
             phone: document.getElementById('inputPhone').value,
             hours: document.getElementById('inputHours').value,
             booking: document.getElementById('inputBooking').value,
-            menu: menuArray
+            menu: document.getElementById('inputMenu').value
         };
 
-        restaurants.push(newRest);
-        saveData();
-        renderTabs(); // 萬一有新分類
-        renderList();
-        closeModal();
+        // 使用 fetch 送出 POST 請求 (no-cors 模式)
+        fetch(API_URL, {
+            method: "POST",
+            body: JSON.stringify(formData)
+        })
+        .then(() => {
+            alert("新增成功！資料已同步。");
+            closeModal();
+            document.getElementById('addForm').reset();
+            fetchData(); // 重新讀取資料
+        })
+        .catch(err => {
+            console.error(err);
+            alert("上傳失敗");
+        })
+        .finally(() => {
+            btn.disabled = false;
+            btn.innerText = originalText;
+        });
     }
-
-    // 點擊遮罩關閉 Modal
-    document.getElementById('addModal').addEventListener('click', function(e) {
-        if (e.target === this) closeModal();
-    });
-
-    // 啟動
-    init();
-
 </script>
-
 </body>
 </html>
